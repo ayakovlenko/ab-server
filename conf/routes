@@ -1,0 +1,11 @@
+GET         /andys/pizzas              controllers.AndysController.pizzas(lang: String)
+
+POST        /andys/cart                controllers.AndysController.addToCart()
+
+POST        /andys/cart/contact        controllers.AndysController.addContactInfo()
+
+DELETE      /andys/cart                controllers.AndysController.resetCart()
+
+POST        /andys/order               controllers.AndysController.placeOrder()
+
+GET         /andys/order/confirm       controllers.AndysController.getConfirmation(user: String, channel: String, lang: String)
