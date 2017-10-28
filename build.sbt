@@ -8,7 +8,7 @@ libraryDependencies ++= Seq(
   "io.monix" %% "monix-eval" % "2.3.0",
   "com.beachape" %% "enumeratum" % "1.5.12",
   "org.jsoup" % "jsoup" % "1.10.3",
-  "com.typesafe.akka" %% "akka-http" % "10.0.10",
+  "com.squareup.okhttp3" % "okhttp" % "3.9.0"
 )
 
 // test dependiencies

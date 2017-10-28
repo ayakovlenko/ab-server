@@ -8,14 +8,14 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.Multipart.FormData
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers._
+import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.{ByteString, Timeout}
+import errors._
 import models.{ContactInfo, MenuItem, OrderInfo}
 import monix.eval.Task
+import okhttp3.{MultipartBody, OkHttpClient, Request}
 import parsers.AndysParser
-import akka.pattern.ask
-import errors._
-
 import play.api.Logger
 
 import scala.concurrent.duration._
@@ -24,15 +24,15 @@ import scala.concurrent.duration._
 class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
                             (implicit system: ActorSystem) {
 
-  import AndysService._
-
   private implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  private implicit val timeout: FiniteDuration = 5.seconds
+  private implicit val timeout: FiniteDuration = 10.seconds
 
   private implicit val askTimeout: Timeout = 5.seconds
 
   private val RootUrl = "https://www.andys.md"
+
+  private val client = new OkHttpClient()
 
   /**
     * Parses pizza page on andys.md.
@@ -40,27 +40,31 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
     * @param lang language of the page
     * @return
     */
-  def pizzas(lang: String): Task[List[MenuItem]] = Task.deferFutureAction { implicit s =>
-    Http().singleRequest(HttpRequest(uri = s"$RootUrl/$lang/pages/menu/8/"))
-      .flatMap {
-        _.entity.toStrict(timeout).map(_.data.utf8String)
-      }
-      .map { html =>
-        AndysParser.parsePizzaPage(html, lang)
-      }
+  def menu(lang: String, category: Int): Task[List[MenuItem]] = Task {
+
+    val request = new Request.Builder()
+      .url(s"$RootUrl/$lang/pages/menu/$category/")
+      .get()
+      .build()
+
+    val response = client.newCall(request).execute()
+
+    val html = response.body().string()
+
+    AndysParser.parsePizzaPage(html, lang)
   }
 
   /**
     * Adds item to the virtual order.
     */
-  def addItemToOrder(item: Long, user: String, channel: String): Task[OrderInfo] = Task.fromFuture {
+  def addItemToOrder(item: Long, user: String, channel: String): Task[OrderInfo] = Task.deferFuture {
     (orders ? Orders.AddItem(channel, user, item)).mapTo[OrderInfo]
   }
 
   /**
     * Updates contact info of the virtual order.
     */
-  def updateContactInfo(contactInfo: ContactInfo, user: String, channel: String): Task[OrderInfo] = Task.fromFuture {
+  def updateContactInfo(contactInfo: ContactInfo, user: String, channel: String): Task[OrderInfo] = Task.deferFuture {
     (orders ? Orders.UpdateContactInfo(contactInfo, user, channel)).mapTo[OrderInfo]
   }
 
@@ -81,7 +85,11 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
           case Some(sId) =>
             Logger.info(s"created session: $sId")
             for {
-              _ <- Task.sequence(items.map(addPizzaToOrder(_, sId)))
+              _ <- Task.sequence {
+                items.groupBy(identity).mapValues(_.size).map {
+                  case (item, quantity) => addItemToOrder(item, quantity, sId)
+                }
+              }
               _ <- addContactInfoToOrder(contact, sId)
               _ <- attachSession(user, channel, sId)
             } yield Right(sId)
@@ -114,48 +122,57 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
     *
     * @return session id
     */
-  private def createSession(): Task[Option[String]] = Task.deferFutureAction { implicit s =>
-    Http().singleRequest(HttpRequest(
-      HttpMethods.HEAD,
-      uri = RootUrl,
-    )).map {
-      _.headers
-        .filter(_.name() == "Set-Cookie")
-        .map(_.asInstanceOf[`Set-Cookie`])
-        .find(_.cookie.name == "PHPSESSID")
-        .map(_.cookie.value)
-    }
-  }
-
-  private def requestConfirmationPage(lang: String, sessionId: String): Task[String] =
+  private def createSession(): Task[Option[String]] =
     Task.deferFutureAction { implicit s =>
-      Http()
-        .singleRequest(HttpRequest(
-          method = HttpMethods.GET,
-          uri = s"$RootUrl/$lang/pages/cart/step4/",
-          headers = List(Cookie("PHPSESSID", sessionId)),
-        ))
-        .flatMap(_.entity.toStrict(timeout).map(_.data.utf8String))
+      val httpRequest = HttpRequest()
+        .withUri(RootUrl)
+        .withMethod(HttpMethods.HEAD)
+
+      Http().singleRequest(httpRequest)
+        .map {
+          _.headers
+          .filter(_.name() == "Set-Cookie")
+          .map(_.asInstanceOf[`Set-Cookie`])
+          .find(_.cookie.name == "PHPSESSID")
+          .map(_.cookie.value)
+        }
     }
 
-  private def addPizzaToOrder(pizzaId: Long, sessionId: String): Task[Unit] = Task.deferFutureAction { implicit s =>
-    Http().singleRequest(HttpRequest(
-      method = HttpMethods.POST,
-      uri = s"$RootUrl/pages/addtocart/",
-      headers = List(Cookie("PHPSESSID", sessionId)),
-      entity = Map(
-        "id" -> pizzaId,
-        "korj" -> 0,
-        "souce" -> 0,
-        "quan" -> 1
-      ).asFormData
-    )).map { _ =>
-      Logger.info(s"added item $pizzaId to order $sessionId")
-      ()
-    }
-  }
+  private def requestConfirmationPage(lang: String, sessionId: String): Task[String] = Task {
+    val request = new Request.Builder()
+      .url(s"$RootUrl/$lang/pages/cart/step4/")
+      .get()
+      .addHeader("cookie", s"PHPSESSID=$sessionId")
+      .build()
 
-  private def addContactInfoToOrder(contactInfo: ContactInfo, sessionId: String): Task[Unit] =
+    val response = client.newCall(request).execute()
+
+    response.body().string()
+  }.timeout(timeout)
+
+  private def addItemToOrder(item: Long, quantity: Int, sessionId: String): Task[Unit] = Task {
+
+    val body = new MultipartBody.Builder()
+      .setType(MultipartBody.FORM)
+      .addFormDataPart("id", item.toString)
+      .addFormDataPart("quan", quantity.toString)
+      .build()
+
+    val request = new Request.Builder()
+      .url(s"$RootUrl/pages/addtocart/")
+      .post(body)
+      .addHeader("cookie", s"PHPSESSID=$sessionId")
+      .build()
+
+    client.newCall(request).execute()
+  }.map { _ =>
+    Logger.info(s"added item $item ($quantity) to order $sessionId")
+    ()
+  }.timeout(timeout)
+
+  private def addContactInfoToOrder(contactInfo: ContactInfo, sessionId: String): Task[Unit] = {
+    import AndysService._
+
     Task.deferFutureAction { implicit s =>
       Http().singleRequest(HttpRequest(
         method = HttpMethods.POST,
@@ -174,6 +191,32 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
         ()
       }
     }.timeout(timeout)
+  }
+
+  /*
+  private def addContactInfoToOrder(contactInfo: ContactInfo, sessionId: String): Task[Unit] = Task {
+    val body = new MultipartBody.Builder()
+      //.setType(MultipartBody.FORM)
+      .addFormDataPart("name", contactInfo.name)
+      .addFormDataPart("city", contactInfo.city.toString)
+      .addFormDataPart("street", contactInfo.street)
+      .addFormDataPart("house", contactInfo.house.toString)
+      .addFormDataPart("phone", contactInfo.phone)
+      .addFormDataPart("orderInfoDiscountCard", contactInfo.discount.getOrElse(""))
+      .build()
+
+    val request = new Request.Builder()
+      .url(s"$RootUrl/pages/setcartadr/")
+      .post(body)
+      .addHeader("cookie", s"PHPSESSID=$sessionId")
+      .build()
+
+    client.newCall(request).execute()
+  }.map { _ =>
+    Logger.info(s"added contact info to order $sessionId")
+    ()
+  }.timeout(timeout)
+  */
 }
 
 object AndysService {

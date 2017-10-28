@@ -20,9 +20,19 @@ class AndysController @Inject()(cc: ControllerComponents,
 
   private implicit val scheduler: Scheduler = Scheduler(cc.executionContext)
 
+  private val PizzaCategory: Int = 8
+
+  private val SaladCategory: Int = 2
+
   def pizzas(lang: String): Action[AnyContent] = Action.async {
-    andysService.pizzas(lang).map { pizzas =>
-      Ok(Json.toJson(pizzas))
+    andysService.menu(lang, PizzaCategory).map { items =>
+      Ok(Json.toJson(items))
+    }.runAsync
+  }
+
+  def salads(lang: String): Action[AnyContent] = Action.async {
+    andysService.menu(lang, SaladCategory).map { items =>
+      Ok(Json.toJson(items))
     }.runAsync
   }
 
