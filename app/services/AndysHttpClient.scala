@@ -11,7 +11,7 @@ import akka.stream.ActorMaterializer
 import akka.util.{ByteString, Timeout}
 import models.ContactInfo
 import monix.eval.Task
-import okhttp3.{MultipartBody, OkHttpClient, Request}
+import okhttp3._
 import play.api.Logger
 
 import scala.concurrent.duration.FiniteDuration
@@ -131,16 +131,39 @@ class AndysHttpClient @Inject()(implicit system: ActorSystem) {
     } /* ugh */
   }.timeout(timeout)
 
-  def requestConfirmOrder(sessionId: String): Task[String] = Task {
+  private class PlaceOrderRedirectInterceptor(lang: String) extends Interceptor {
+
+    override def intercept(chain: Interceptor.Chain): Response = {
+      val response = chain.proceed(chain.request())
+
+      if (response.isRedirect) {
+        val newResponse = response.newBuilder()
+          .addHeader("Location", s"$RootUrl/ru/pages/cart/orderconfirmed/")
+          .build()
+
+        newResponse
+      } else {
+        response
+      }
+    }
+  }
+
+  private def placeOrderClient(lang: String) = new OkHttpClient.Builder()
+    .addNetworkInterceptor(new PlaceOrderRedirectInterceptor(lang))
+    .build()
+
+  def requestPlaceOrder(lang: String, sessionId: String): Task[String] = Task {
     val request = new Request.Builder()
       .url(s"$RootUrl/pages/placeorder/")
       .get()
       .addHeader("cookie", s"PHPSESSID=$sessionId")
       .build()
 
-    val response = client.newCall(request).execute()
+    val response = placeOrderClient(lang).newCall(request).execute()
 
-    response.body().string()
+    val html = response.body().string()
+
+    org.jsoup.Jsoup.parse(html).select("#prsent").text()
   }
 
   def requestMenuPage(lang: String, category: Int): Task[String] = Task {

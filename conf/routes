@@ -8,4 +8,4 @@ DELETE      /andys/cart                controllers.AndysController.resetCart()
 
 POST        /andys/order/checkout      controllers.AndysController.checkoutOrder(lang: String)
 
-POST        /andys/order/place         controllers.AndysController.placeOrder()
+POST        /andys/order/place         controllers.AndysController.placeOrder(lang: String)

@@ -100,15 +100,16 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef,
         andysHttpClient.requestConfirmationPage(lang, sessionId).map(AndysParser.parseConfirmationPage(_, lang))
     }
 
-  def placeOrder(user: String, channel: String): Task[String] =
+  def placeOrder(user: String, channel: String, lang: String): Task[String] =
     Task.deferFutureAction { implicit s =>
       (orders ? Orders.FindSession(channel, user)).mapTo[Option[String]]
     }.flatMap {
       case None => Task.now("failed to place order")
       case Some(sessionId) =>
-        andysHttpClient.requestConfirmOrder(sessionId)
-    }.map { html =>
-      println(html)
-      html
+        andysHttpClient.requestPlaceOrder(lang, sessionId)
+          .map { response =>
+            Logger.info(s"placed order $sessionId: $response")
+            response
+          }
     }
 }
