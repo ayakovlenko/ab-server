@@ -1,6 +1,4 @@
-GET         /andys/menu/pizzas         controllers.AndysController.pizzas(lang: String)
-
-GET         /andys/menu/salads         controllers.AndysController.salads(lang: String)
+GET         /andys/menu/:category      controllers.AndysController.menu(category: String, lang: String)
 
 POST        /andys/cart                controllers.AndysController.addToCart()
 

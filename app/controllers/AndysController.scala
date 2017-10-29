@@ -5,6 +5,7 @@ import javax.inject.{Inject, Singleton}
 import models.requests.{AddItemToCartRequest, CartRequest, UpdateContactInfoRequest}
 import models.{ContactInfo, MenuItem, OrderInfo}
 import monix.execution.Scheduler
+import play.api.cache.Cached
 import play.api.libs.json.{Format, Json, Reads, Writes}
 import play.api.mvc._
 import services.AndysService
@@ -14,26 +15,37 @@ import scala.concurrent.Future
 
 @Singleton
 class AndysController @Inject()(cc: ControllerComponents,
-                                andysService: AndysService) extends AbstractController(cc) {
+                                andysService: AndysService,
+                                cached: Cached) extends AbstractController(cc) {
 
   import AndysController._
 
   private implicit val scheduler: Scheduler = Scheduler(cc.executionContext)
 
+  private val categoryMap = Map(
+    "pizzas" -> 8,
+    "salads" -> 2,
+    "burgers" -> 41
+  )
+
   private val PizzaCategory: Int = 8
 
   private val SaladCategory: Int = 2
 
-  def pizzas(lang: String): Action[AnyContent] = Action.async {
-    andysService.menu(lang, PizzaCategory).map { items =>
-      Ok(Json.toJson(items))
-    }.runAsync
-  }
+  def menu(categoryName: String, lang: String): EssentialAction = {
+    val caching = cached.status(_ => s"menu/$categoryName/$lang", 200)
 
-  def salads(lang: String): Action[AnyContent] = Action.async {
-    andysService.menu(lang, SaladCategory).map { items =>
-      Ok(Json.toJson(items))
-    }.runAsync
+    caching {
+      Action.async {
+        categoryMap.get(categoryName) match {
+          case None => Future(NotFound)
+          case Some(categoryId) =>
+            andysService.menu(lang, categoryId).map { items =>
+              Ok(Json.toJson(items))
+            }.runAsync
+        }
+      }
+    }
   }
 
   def addToCart(): Action[AnyContent] = Action.async { implicit req =>

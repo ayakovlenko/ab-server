@@ -1,6 +1,6 @@
 package services
 
-import javax.inject.Singleton
+import javax.inject.{Inject, Singleton}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -18,7 +18,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
 
 @Singleton
-class AndysHttpClient(implicit system: ActorSystem) {
+class AndysHttpClient @Inject()(implicit system: ActorSystem) {
 
   private implicit val materializer: ActorMaterializer = ActorMaterializer()
 
