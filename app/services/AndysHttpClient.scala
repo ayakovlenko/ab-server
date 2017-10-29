@@ -103,7 +103,8 @@ class AndysHttpClient @Inject()(implicit system: ActorSystem) {
           "street" -> contactInfo.street,
           "house" -> contactInfo.house,
           "phone" -> contactInfo.phone,
-          "orderInfoDiscountCard" -> contactInfo.discount.getOrElse("")
+          "orderInfoDiscountCard" -> contactInfo.discount.getOrElse(""),
+          "mail" -> contactInfo.email.getOrElse("")
         ).asFormData
       )).map { _ =>
         Logger.info(s"added contact info to order $sessionId")

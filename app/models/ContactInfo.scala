@@ -5,4 +5,5 @@ case class ContactInfo(name: String,
                        street: String,
                        house: Int,
                        phone: String,
+                       email: Option[String] = None,
                        discount: Option[String] = None)

@@ -112,5 +112,5 @@ object AndysController {
 
   private implicit lazy val resetCartRequest: Reads[CartRequest] = Json.reads[CartRequest]
 
-  private implicit lazy val optionStringReads: Reads[Option[String]] = Reads.optionWithNull
+  private implicit lazy val optionStringReads: Format[Option[String]] = Format.optionWithNull
 }
