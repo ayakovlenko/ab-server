@@ -34,6 +34,15 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
 
   private val client = new OkHttpClient()
 
+  // ---
+
+  //noinspection ScalaUnusedSymbol
+  private val PaymentCard = 1
+
+  private val PaymentCash = 2
+
+  // ---
+
   /**
     * Parses pizza page on andys.md.
     *
@@ -90,6 +99,7 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
                   case (item, quantity) => addItemToOrder(item, quantity, sId)
                 }
               }
+              _ <- setPaymentMethod(PaymentCash, sId)
               _ <- addContactInfoToOrder(contact, sId)
               _ <- attachSession(user, channel, sId)
             } yield Right(sId)
@@ -191,6 +201,18 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
         ()
       }
     }.timeout(timeout)
+  }
+
+  private def setPaymentMethod(paymentMethod: Int, sessionId: String): Task[Unit] = Task {
+    val url = s"$RootUrl/pages/stptype_new/$paymentMethod/"
+
+    val request = new Request.Builder()
+      .url(url)
+      .get()
+      .addHeader("cookie", s"PHPSESSID=$sessionId")
+      .build()
+
+    client.newCall(request).execute()
   }
 
   /*
