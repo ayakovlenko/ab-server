@@ -6,6 +6,7 @@ import org.jsoup.nodes.Element
 
 import scala.util.matching.Regex
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 object AndysParser {
 
@@ -19,8 +20,9 @@ object AndysParser {
 
   private def parsePrice(elem: Element): String = elem.select(".ands_price").text
 
-  private def parseIngredients(elem: Element): List[String] =
-    elem.select(".title").asScala.head.nextElementSibling().text.split(",\\s").toList
+  private def parseIngredients(elem: Element): List[String] = Try {
+    elem.select(".title").asScala.head.nextElementSibling().text.split(",\\s*").map(_.trim.toLowerCase).toList
+  }.getOrElse(Nil)
 
   private def parseImage(elem: Element): List[String] = Nil
 
@@ -35,7 +37,7 @@ object AndysParser {
         val ingredients = parseIngredients(elem)
         val images = parseImage(elem)
 
-        MenuItem(id, "pizza", name, price, ingredients, images)
+        MenuItem(id, name, price, ingredients, images)
       }
       .toList
   }

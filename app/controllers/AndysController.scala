@@ -25,7 +25,10 @@ class AndysController @Inject()(cc: ControllerComponents,
   private val categoryMap = Map(
     "pizzas" -> 8,
     "salads" -> 2,
-    "burgers" -> 41
+    "burgers" -> 41,
+    "garnishes" -> 50,
+    "beer" -> 16,
+    "soups" -> 3
   )
 
   def menu(categoryName: String, lang: String): EssentialAction = {
@@ -86,11 +89,11 @@ class AndysController @Inject()(cc: ControllerComponents,
     }
   }
 
-  def placeOrder(): Action[AnyContent] = Action.async { implicit req =>
+  def placeOrder(lang: String): Action[AnyContent] = Action.async { implicit req =>
     req.body.asJson.map(_.as[CartRequest]) match {
       case None => Future(UnprocessableEntity)
       case Some(CartRequest(user, channel)) =>
-        andysService.placeOrder(user, channel).map {
+        andysService.placeOrder(user, channel, lang).map {
           Ok(_)
         }.runAsync
     }
