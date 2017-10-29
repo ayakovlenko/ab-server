@@ -28,10 +28,6 @@ class AndysController @Inject()(cc: ControllerComponents,
     "burgers" -> 41
   )
 
-  private val PizzaCategory: Int = 8
-
-  private val SaladCategory: Int = 2
-
   def menu(categoryName: String, lang: String): EssentialAction = {
     val caching = cached.status(_ => s"menu/$categoryName/$lang", 200)
 
@@ -49,7 +45,6 @@ class AndysController @Inject()(cc: ControllerComponents,
   }
 
   def addToCart(): Action[AnyContent] = Action.async { implicit req =>
-
     req.body.asJson.map(_.as[AddItemToCartRequest]) match {
       case None => Future(UnprocessableEntity)
       case Some(AddItemToCartRequest(item, user, channel)) =>
