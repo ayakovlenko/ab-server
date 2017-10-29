@@ -67,21 +67,26 @@ class AndysController @Inject()(cc: ControllerComponents,
 
   def completeOrder(): Action[AnyContent] = TODO
 
+  def checkoutOrder(lang: String): Action[AnyContent] = Action.async { implicit req =>
+    req.body.asJson.map(_.as[CartRequest]) match {
+      case None => Future(UnprocessableEntity)
+      case Some(CartRequest(user, channel)) =>
+        andysService.checkoutOrder(user, channel, lang).map {
+          case Left(error) => BadRequest(error.toString)
+          case Right(confirmation) =>
+            Ok(Json.toJson(ListMap(confirmation: _*)))
+        }.runAsync
+    }
+  }
+
   def placeOrder(): Action[AnyContent] = Action.async { implicit req =>
     req.body.asJson.map(_.as[CartRequest]) match {
       case None => Future(UnprocessableEntity)
       case Some(CartRequest(user, channel)) =>
         andysService.placeOrder(user, channel).map {
-          case Left(error) => BadRequest(error.toString)
-          case Right(sessionId) => Ok(sessionId)
+          Ok(_)
         }.runAsync
     }
-  }
-
-  def getConfirmation(user: String, channel: String, lang: String): Action[AnyContent] = Action.async {
-    andysService.getConfirmation(user, channel, lang).map(attrs =>
-      Ok(Json.toJson(ListMap(attrs: _*)))
-    ).runAsync
   }
 }
 

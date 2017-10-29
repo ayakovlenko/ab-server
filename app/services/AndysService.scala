@@ -12,7 +12,7 @@ import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.{ByteString, Timeout}
 import errors._
-import models.{ContactInfo, MenuItem, OrderInfo}
+import models.{ContactInfo, MenuItem, OrderConfirmation, OrderInfo}
 import monix.eval.Task
 import okhttp3.{MultipartBody, OkHttpClient, Request}
 import parsers.AndysParser
@@ -77,7 +77,7 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
     (orders ? Orders.UpdateContactInfo(contactInfo, user, channel)).mapTo[OrderInfo]
   }
 
-  def placeOrder(user: String, channel: String): Task[Either[OrderPlacementError, String]] = {
+  def checkoutOrder(user: String, channel: String, lang: String): Task[Either[OrderPlacementError, OrderConfirmation]] = {
     def error(e: OrderPlacementError) = Task.now(Left(e))
 
     Task.deferFuture {
@@ -102,7 +102,8 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
               _ <- setPaymentMethod(PaymentCash, sId)
               _ <- addContactInfoToOrder(contact, sId)
               _ <- attachSession(user, channel, sId)
-            } yield Right(sId)
+              confirmation <- getConfirmation(user, channel, lang)
+            } yield Right(confirmation)
         }
     }
   }
@@ -123,6 +124,18 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
       case None => Task.now(Nil)
       case Some(sessionId) =>
         requestConfirmationPage(lang, sessionId).map(AndysParser.parseConfirmationPage(_, lang))
+    }
+
+  def placeOrder(user: String, channel: String): Task[String] =
+    Task.deferFutureAction { implicit s =>
+      (orders ? Orders.FindSession(channel, user)).mapTo[Option[String]]
+    }.flatMap {
+      case None => Task.now("failed to place order")
+      case Some(sessionId) =>
+        requestConfirmOrder(sessionId)
+    }.map { html =>
+      println(html)
+      html
     }
 
   // ---
@@ -174,7 +187,13 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
       .addHeader("cookie", s"PHPSESSID=$sessionId")
       .build()
 
-    client.newCall(request).execute()
+    val response = client.newCall(request).execute()
+
+    try {
+      ()
+    } finally {
+      response.close()
+    } /* ugh */
   }.map { _ =>
     Logger.info(s"added item $item ($quantity) to order $sessionId")
     ()
@@ -212,7 +231,25 @@ class AndysService @Inject()(@Named("andys-orders") orders: ActorRef)
       .addHeader("cookie", s"PHPSESSID=$sessionId")
       .build()
 
-    client.newCall(request).execute()
+    val response = client.newCall(request).execute()
+
+    try {
+      ()
+    } finally {
+      response.close()
+    } /* ugh */
+  }
+
+  private def requestConfirmOrder(sessionId: String): Task[String] = Task {
+    val request = new Request.Builder()
+      .url(s"$RootUrl/pages/placeorder/")
+      .get()
+      .addHeader("cookie", s"PHPSESSID=$sessionId")
+      .build()
+
+    val response = client.newCall(request).execute()
+
+    response.body().string()
   }
 
   /*

@@ -8,6 +8,6 @@ POST        /andys/cart/contact        controllers.AndysController.addContactInf
 
 DELETE      /andys/cart                controllers.AndysController.resetCart()
 
-POST        /andys/order               controllers.AndysController.placeOrder()
+POST        /andys/order/checkout      controllers.AndysController.checkoutOrder(lang: String)
 
-GET         /andys/order/confirm       controllers.AndysController.getConfirmation(user: String, channel: String, lang: String)
+POST        /andys/order/place         controllers.AndysController.placeOrder()
