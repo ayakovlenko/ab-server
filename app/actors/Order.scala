@@ -1,10 +1,15 @@
 package actors
 
-import akka.actor.{Actor, Props}
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+
+import akka.actor.{Actor, PoisonPill, Props, Timers}
 import akka.event.Logging
 import models.{ContactInfo, OrderInfo}
 
-class Order extends Actor {
+import scala.concurrent.duration._
+
+class Order extends Actor with Timers {
 
   import Order._
 
@@ -18,22 +23,49 @@ class Order extends Actor {
 
   def orderInfo: OrderInfo = OrderInfo(contactInfo, items)
 
+  // ---
+
+  private var expires = Instant.now().plus(1, ChronoUnit.MINUTES)
+
+  timers.startPeriodicTimer(
+    key = TickKey,
+    msg = Tick,
+    interval = 10.seconds
+  )
+
+  private def prolongLife(): Unit = {
+    expires = expires.plus(1, ChronoUnit.MINUTES)
+    println(s"${self.path.name} will expire at $expires")
+  }
+
+  // ---
+
   override def receive: Receive = {
     case GetOrderInfo =>
+      prolongLife()
       sender() ! Some(orderInfo)
     case AddItem(item) =>
+      prolongLife()
       items = item :: items
       sender() ! orderInfo
-      log.debug("{}: {}", context.self.path, items)
+      log.debug("{}: {}", self.path, items)
     case UpdateContactInfo(newContactInfo) =>
+      prolongLife()
       contactInfo = Some(newContactInfo)
       sender() ! orderInfo
     case AttachSession(id) =>
+      prolongLife()
       sessionId = Some(id)
       sender() ! Some(orderInfo)
-      log.debug("{}: session {} attached", context.self.path, sessionId)
+      log.debug("{}: session {} attached", self.path, sessionId)
     case FindSession =>
+      prolongLife()
       sender() ! sessionId
+    case Tick =>
+      if (expires.isBefore(Instant.now())) {
+        println(s"${self.path.name} has expired")
+        self ! PoisonPill
+      }
   }
 }
 
@@ -48,6 +80,10 @@ object Order {
   case class AttachSession(sessionId: String)
 
   case object FindSession
+
+  private case object TickKey
+
+  private case object Tick
 
   def props: Props = Props[Order]
 }
