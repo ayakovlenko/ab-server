@@ -5,7 +5,7 @@ import akka.testkit.{TestActorRef, TestKit}
 import models.{ContactInfo, OrderInfo}
 import org.scalatest.{FlatSpecLike, Matchers}
 
-class OrderTest extends TestKit(ActorSystem("test"))
+class OrderActorSpec extends TestKit(ActorSystem("test"))
   with FlatSpecLike
   with Matchers
   with StopSystemAfterAll {
@@ -33,7 +33,8 @@ class OrderTest extends TestKit(ActorSystem("test"))
       "Stefan cel Mare",
       202,
       "+373 (69) 123456",
-      None
+      Some("ion.doe@gmail.com"),
+      Some("123456789")
     )
 
     order ! Order.UpdateContactInfo(contactInfo)
