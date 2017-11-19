@@ -3,17 +3,14 @@ package actors
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-import akka.actor.{Actor, PoisonPill, Props, Timers}
-import akka.event.Logging
+import akka.actor.{Actor, ActorLogging, PoisonPill, Props, Timers}
 import models.{ContactInfo, OrderInfo}
 
 import scala.concurrent.duration._
 
-class Order extends Actor with Timers {
+class Order extends Actor with ActorLogging with Timers {
 
   import Order._
-
-  private val log = Logging(context.system, this)
 
   private var items: List[Long] = Nil
 
@@ -25,7 +22,7 @@ class Order extends Actor with Timers {
 
   // ---
 
-  private var expires = Instant.now().plus(1, ChronoUnit.MINUTES)
+  private var expires: Instant = _
 
   timers.startPeriodicTimer(
     key = TickKey,
@@ -66,6 +63,12 @@ class Order extends Actor with Timers {
         println(s"${self.path.name} has expired")
         self ! PoisonPill
       }
+  }
+
+  override def preStart(): Unit = {
+    expires = Instant.now().plus(1, ChronoUnit.MINUTES)
+
+    super.preStart()
   }
 }
 
